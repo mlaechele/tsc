@@ -67,10 +67,13 @@ def aggregate_weights(weights_in, timeline, out_file=None):
             if interval.edge is not None:
                 for edge in interval.edge:
                     if edge.traveltime is not None:
-                        s = float(edge.sampledSeconds)
-                        samples[edge.id] += s
-                        travel_time_ratios[edge.id] += s / \
-                            float(edge.traveltime)
+                        try:
+                            s = float(edge.sampledSeconds)
+                            samples[edge.id] += s
+                            travel_time_ratios[edge.id] += s / \
+                                float(edge.traveltime)
+                        except ZeroDivisionError:
+                            print('ZeroDivisionError occurred when aggregating weights on edge', edge.id)
             end = (timeline[idx] + 24) * 3600
             if float(interval.end) == end:
                 write_interval(begin, end)
