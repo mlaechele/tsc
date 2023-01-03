@@ -1,5 +1,5 @@
 #!/usr/bin/env python
-# Copyright (C) 2013-2020 German Aerospace Center (DLR) and others.
+# Copyright (C) 2013-2022 German Aerospace Center (DLR) and others.
 # This program and the accompanying materials are made available under the
 # terms of the Eclipse Public License 2.0 which is available at
 # https://www.eclipse.org/legal/epl-2.0/
@@ -124,7 +124,7 @@ def create_personfile(mapped_trips, input_routes, output_routes):
                     #       % (row[THX.depart_second], source_edge))
 
                     # fixed duration
-                    person_lines.append('        <walk from="%s" to="%s"/>' % (redges[-1], source_edge))
+                    person_lines.append('        <walk from="%s" to="%s"/>' % (previous_dest_edge, source_edge))
                     person_lines.append('        <stop duration="%s" lane="%s_0" endPos="%s" friendlyPos="true"/>'
                                         % (stopping_time, source_edge, previous_arrival_pos))
 
@@ -145,8 +145,7 @@ def create_personfile(mapped_trips, input_routes, output_routes):
 
             person_lines.append('    </person>\n')
 
-            routed_item = '\n'.join(
-                person_lines) + '\n'.join(vehicle_lines) + '\n'
+            routed_item = '\n'.join(person_lines) + '\n'.join(vehicle_lines) + '\n'
             routes_xml_lines.append((depart, routed_item))
 
             if arrival_guess > sim_end:

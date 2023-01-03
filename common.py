@@ -1,4 +1,4 @@
-# Copyright (C) 2013-2020 German Aerospace Center (DLR) and others.
+# Copyright (C) 2013-2022 German Aerospace Center (DLR) and others.
 # This program and the accompanying materials are made available under the
 # terms of the Eclipse Public License 2.0 which is available at
 # https://www.eclipse.org/legal/epl-2.0/
@@ -19,6 +19,7 @@
 from __future__ import print_function, division
 import subprocess
 import os
+import sys
 import csv
 
 import constants
@@ -31,12 +32,12 @@ def abspath_in_dir(d, f):
         # getcwd (and thus abspath) can fail on cifs mounts, see https://bugs.python.org/issue17525
         return os.path.normpath(os.path.join(os.environ['PWD'], d, f))
 
-def call(cmd):
-    # ensure unix compatibility
-    print(cmd)
-    if isinstance(cmd, str):
-        cmd = filter(lambda a: a != '', cmd.split(' '))
-    subprocess.call(cmd)
+def call(cmd, verbose=False):
+    if verbose:
+        print(" ".join(cmd))
+    sys.stdout.flush()
+    sys.stderr.flush()
+    subprocess.check_call(cmd)
 
 def ensure_dir(dir):
     if not os.path.isdir(dir):

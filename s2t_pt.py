@@ -1,6 +1,4 @@
-#!/usr/bin/env python
-
-# Copyright (C) 2013-2020 German Aerospace Center (DLR) and others.
+# Copyright (C) 2013-2022 German Aerospace Center (DLR) and others.
 # This program and the accompanying materials are made available under the
 # terms of the Eclipse Public License 2.0 which is available at
 # https://www.eclipse.org/legal/epl-2.0/
@@ -15,7 +13,7 @@
 # @author  Michael Behrisch
 # @date    2021-10-06
 
-# parse duarouter all pair ozutput for public transport and upload the results to the database
+# parse duarouter all pair output for public transport and upload the results to the database
 
 from __future__ import print_function, division
 import os
@@ -54,12 +52,14 @@ def parse_person(p):
             if stage.cost:
                 walkDuration[idx] += float(stage.cost)
                 if idx == 0:
-                    ended = walkDuration[idx]
+                    ended = walkDuration[idx] + rideEnd
             else:
                 ended = float(stage.ended)
                 walkDuration[idx] = ended - rideEnd
             walkLength[idx] += float(stage.routeLength)
         elif stage.name == "ride":
+            if stage.depart is None:  # something went wrong
+                break
             if idx == 0:
                 idx = 1
                 initWait = float(stage.depart) - float(p.depart) - walkDuration[0]
@@ -110,12 +110,12 @@ def _createValueTuple(od, end, real, sumoTime, sumoDist):
     timeMean, timeStd = sumoTime.meanAndStdDev()
     distMean, distStd = sumoDist.meanAndStdDev()
     return base + (sumoTime.count() - real,
-                   "{%s}" % (str(timeMean)[1:-1]), sum(timeStd) / len(timeStd),
-                   "{%s}" % (str(distMean)[1:-1]), sum(distStd) / len(distStd))
+                   "{%s}" % (str(timeMean.tolist())[1:-1]), sum(timeStd) / len(timeStd),
+                   "{%s}" % (str(distMean.tolist())[1:-1]), sum(distStd) / len(distStd))
 
 
 @benchmark
-def upload_all_pairs(conn, tables, start, end, real_routes, rep_routes, net, taz_list, startIdx=0):
+def upload_all_pairs(conn, tables, start, end, real_routes, rep_routes, net, startIdx=0):
     stats = list(_parse_person_info_taz(real_routes, start, end))
     print("Parsed taz results for %s persons from %s." % (len(stats), real_routes))
     stats.extend(_get_all_pair_stats(rep_routes, net))
@@ -137,8 +137,8 @@ def upload_all_pairs(conn, tables, start, end, real_routes, rep_routes, net, taz
         if not faked or sumoTime.count() < min_samples:
             if not faked:
                 real += 1
-            sumoTime.add(duration)
-            sumoDist.add(dist)
+            sumoTime.add(np.array(duration))
+            sumoDist.add(np.array(dist))
     if last is not None:
         values.append(_createValueTuple(last, end, real, sumoTime, sumoDist))
     cursor = conn.cursor()

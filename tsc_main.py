@@ -1,6 +1,6 @@
 #!/usr/bin/env python
 
-# Copyright (C) 2014-2020 German Aerospace Center (DLR) and others.
+# Copyright (C) 2014-2022 German Aerospace Center (DLR) and others.
 # This program and the accompanying materials are made available under the
 # terms of the Eclipse Public License 2.0 which is available at
 # https://www.eclipse.org/legal/epl-2.0/
@@ -96,6 +96,8 @@ def getOptions(args, argParser):
 
 def get_simulation_requests(options):
     overrides = dict([item.split(":") for item in options.sim_param.split(",") if item])
+    if options.modes is not None:
+        overrides["SUMO_MODES"] = options.modes
     if options.fake_tripfile or options.sim_key:
         if options.sim_key is None:
             options.sim_key = DEFAULT_SIMKEY
@@ -382,8 +384,8 @@ def simulation_request(options, request):
             options.net_file += ".gz"
         if options.taz_file is None and params.get('DB_TABLE_TAZ') == 'berlin_taz_1223':
             # just a hack to have a good taz file for the new scenarios
-            options.taz_file = os.path.abspath(os.path.join(scenario_basedir, 'Berlin_1223.taz.xml'))
-        options.bidi_taz_file = os.path.abspath(os.path.join(scenario_basedir, 'bidi.taz.xml'))
+            options.taz_file = os.path.abspath(os.path.join(scenario_basedir, 'Berlin_1223.taz.xml.gz'))
+        options.bidi_taz_file = os.path.abspath(os.path.join(scenario_basedir, 'bidi.taz.xml.gz'))
         options.tapas_trips = os.path.join(scenario_basedir, "background_traffic.csv")
         if iteration == 0 and params[SP.add_traffic_table] and conn is not None:
 #            options.modes = ','.join(CAR_MODES)

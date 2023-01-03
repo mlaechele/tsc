@@ -1,6 +1,6 @@
 #!/usr/bin/env python
 
-# Copyright (C) 2013-2020 German Aerospace Center (DLR) and others.
+# Copyright (C) 2013-2022 German Aerospace Center (DLR) and others.
 # This program and the accompanying materials are made available under the
 # terms of the Eclipse Public License 2.0 which is available at
 # https://www.eclipse.org/legal/epl-2.0/
@@ -101,8 +101,7 @@ def fillOptions(argParser):
     argParser.add_argument("--bike-type", default="ped_bike", help="treat bicycles as pedestrians with the given type")
     argParser.add_argument("--shift-departure-hours", type=int, default=24, dest="shiftdeparthours",
                            help="shift departure times by the given number of hours (to handle trips that depart before midnight)")
-    argParser.add_argument("-m", "--modes", default=','.join(CAR_MODES),
-                           help="the traffic modes to retrieve as a list of integers (default: '%(default)s')")
+    argParser.add_argument("-m", "--modes", help="the traffic modes to retrieve as a list of integers")
     argParser.add_argument("--subnet-file", help="specifying the subnet to use to rerun a subnet assignment")
     argParser.add_argument("--resume", action="store_true", default=False,
                            help="reuse existing files instead of overwriting them")
@@ -129,11 +128,15 @@ def checkOptions(options):
         options.vtype_file = os.path.abspath(options.vtype_file)
     if options.taz_file is None:
         options.taz_file = abspath_in_dir(
-            os.path.dirname(options.net_file), "districts.taz.xml")
+            os.path.dirname(options.net_file), "districts.taz.xml.gz")
     else:
         options.taz_file = os.path.abspath(options.taz_file)
     if options.bidi_taz_file:
         options.bidi_taz_file = os.path.abspath(options.bidi_taz_file)
+
+    if options.modes is None:
+        # cannot use a default because tsc_main wants to check whether it has been set manually
+        options.modes = ','.join(CAR_MODES)
 
     if options.subnet_file is None:
         assert options.tapas_trips is not None, "tripfile is not given"
@@ -187,7 +190,7 @@ def rectify_input(options):
     # report overlapping times
     # filter trips wich start on the next day
     # filter trips by mode (optional)
-    # diffuse geoCoordinates with a gausian (mu = 0, sigma = spatialDiffuse meters)
+    # diffuse geoCoordinates with a gaussian (mu = 0, sigma = spatialDiffuse meters)
     # since tapas inputs tends to show strong spatial clustering (call it
     # parking related diffusion)
     diffusion_map = {}
