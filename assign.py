@@ -129,7 +129,7 @@ def run_oneshot(options, first_depart, last_depart, trip_file, weight_file, meso
     oneshot_routes = abspath_in_dir(
         oneshot_dir, 'vehroutes_%s.rou.xml' % suffix)
     oneshot_weights = abspath_in_dir(oneshot_dir, 'aggregated_%s.xml' % suffix)
-    if os.path.exists(oneshot_routes) and options.resume:
+    if os.path.exists(oneshot_routes) and (hasattr(options, 'resume') and options.resume):
         print("Route file", oneshot_routes, "exists! Skipping assignment.")
         return oneshot_routes, oneshot_weights
     aggregation = 1800
@@ -150,7 +150,9 @@ def run_oneshot(options, first_depart, last_depart, trip_file, weight_file, meso
     trips = [trip_file]
     if os.path.exists(options.background_trips):
         trips.append(options.background_trips)
-        additional.append(glob.glob(os.path.join(base_dir, 'suburb.taz.xml*'))[0])
+        suburb_taz_path = glob.glob(os.path.join(base_dir, 'suburb.taz.xml*'))[0]
+        if os.path.exists(suburb_taz_path):
+            additional.append(suburb_taz_path)
     specificPT = glob.glob(abspath_in_dir(oneshot_dir, 'pt*.xml*'))
     additional += sorted(specificPT if specificPT else glob.glob(os.path.join(base_dir, 'pt*.xml*')))
     additional += sorted(glob.glob(os.path.join(base_dir, 'fleet*.xml*')), reverse=True)
