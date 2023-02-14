@@ -151,7 +151,9 @@ def run_oneshot(options, first_depart, last_depart, trip_file, weight_file, meso
     trips = [trip_file]
     if os.path.exists(options.background_trips):
         trips.append(options.background_trips)
-        additional.append(os.path.join(base_dir, 'suburb.taz.xml'))
+        suburb_taz_path = os.path.join(base_dir, 'suburb.taz.xml')
+        if os.path.exists(suburb_taz_path):
+            additional.append(suburb_taz_path)
     specificPT = glob.glob(abspath_in_dir(oneshot_dir, 'pt*.xml'))
     additional += sorted(specificPT if specificPT else glob.glob(os.path.join(base_dir, 'pt*.xml')))
 
@@ -238,7 +240,7 @@ def run_bulk(options, first_depart, last_depart, trip_file, weight_file):
     additional = [options.vtype_file]
     if options.bidi_taz_file:
         additional.append(options.bidi_taz_file)
-    if os.path.exists(route_file) and not options.overwrite:
+    if os.path.exists(route_file) and (hasattr(options, 'overwrite') and not options.overwrite):
         print("Route file", route_file, "exists! Skipping computation.")
         return route_file, weight_file
     duarouter_args = [
