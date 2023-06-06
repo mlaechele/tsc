@@ -131,7 +131,7 @@ def run_oneshot(options, first_depart, last_depart, trip_file, weight_file, meso
     oneshot_routes = abspath_in_dir(
         oneshot_dir, 'vehroutes_%s.rou.xml' % suffix)
     oneshot_weights = abspath_in_dir(oneshot_dir, 'aggregated_%s.xml' % suffix)
-    if os.path.exists(oneshot_routes) and not options.overwrite:
+    if os.path.exists(oneshot_routes) and (hasattr(options, 'overwrite') and not options.overwrite):
         print("Route file", oneshot_routes, "exists! Skipping assignment.")
         return oneshot_routes, oneshot_weights
     aggregation = 1800
@@ -405,7 +405,7 @@ def run_subnet(options, first_depart, last_depart, routes, weights, subnet_file)
         subOpt.vtype_file += "," + os.path.abspath(ptTypeFiles[0])
     subOpt.background_trips = ""
 #    addOpt = "--max-depart-delay 1 --max-num-vehicles 9000 --device.rerouting.adaptation-steps 360 --device.rerouting.probability 0.6 "
-    addOpt = "--max-depart-delay 1 --device.rerouting.probability 0.6 "
+    addOpt = "--max-depart-delay 900"# --device.rerouting.probability 1 "
     if "oneshot" in options.assignment:
         routes, weights = run_oneshot(subOpt, first_depart, last_depart, routes, weights, False, addOpt)
     if "gawron" in options.assignment:
