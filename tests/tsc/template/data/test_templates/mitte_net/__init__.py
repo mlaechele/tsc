@@ -2,7 +2,7 @@
 @file    __init__.py
 @author  Michael.Behrisch@dlr.de
 @date    2015-06-10
-@version $Id: __init__.py 4620 2015-06-27 14:06:36Z behr_mi $
+@version $Id: __init__.py 8298 2020-03-05 12:31:51Z behr_mi $
 
 custom script collection for berlin_2010
 

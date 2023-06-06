@@ -1,6 +1,4 @@
-#!/usr/bin/env python
-
-# Copyright (C) 2013-2020 German Aerospace Center (DLR) and others.
+# Copyright (C) 2013-2022 German Aerospace Center (DLR) and others.
 # This program and the accompanying materials are made available under the
 # terms of the Eclipse Public License 2.0 which is available at
 # https://www.eclipse.org/legal/epl-2.0/
@@ -15,7 +13,7 @@
 # @author  Michael Behrisch
 # @date    2021-10-06
 
-# parse duarouter all pair ozutput for public transport and upload the results to the database
+# parse duarouter all pair output for public transport and upload the results to the database
 
 from __future__ import print_function, division
 import os
@@ -54,12 +52,14 @@ def parse_person(p):
             if stage.cost:
                 walkDuration[idx] += float(stage.cost)
                 if idx == 0:
-                    ended = walkDuration[idx]
+                    ended = walkDuration[idx] + rideEnd
             else:
                 ended = float(stage.ended)
                 walkDuration[idx] = ended - rideEnd
             walkLength[idx] += float(stage.routeLength)
         elif stage.name == "ride":
+            if stage.depart is None:  # something went wrong
+                break
             if idx == 0:
                 idx = 1
                 initWait = float(stage.depart) - float(p.depart) - walkDuration[0]

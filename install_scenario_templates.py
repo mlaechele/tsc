@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 
-# Copyright (C) 2014-2020 German Aerospace Center (DLR) and others.
+# Copyright (C) 2014-2022 German Aerospace Center (DLR) and others.
 # This program and the accompanying materials are made available under the
 # terms of the Eclipse Public License 2.0 which is available at
 # https://www.eclipse.org/legal/epl-2.0/
@@ -42,7 +42,7 @@ import osmTaxiStop  # noqa
 import db_manipulator
 import import_navteq
 import get_germany_taz
-from common import listdir_skip_hidden
+from common import listdir_skip_hidden, call
 
 
 def getOptions():
@@ -66,6 +66,8 @@ def getOptions():
                            help="name of file listing landmark edges")
     argParser.add_argument("--no-network", action="store_true", default=False,
                            help="skip network building")
+    argParser.add_argument("--osm-ptlines", action="store_true", default=False,
+                           help="use osm information on public transport lines")
     return argParser.parse_args()
 
 
@@ -75,6 +77,23 @@ def evaluate_pre_scen(options):
             if os.path.isdir(os.path.join(options.pre, d)):
                 if options.scenarios is None or d in options.scenarios.split(","):
                     yield os.path.join(p, d)
+
+
+def ensure_tmp(scenario_template_dir):
+    tmp_output_dir = os.path.join(scenario_template_dir, 'tmp_output')
+    if os.path.exists(tmp_output_dir):
+        shutil.rmtree(tmp_output_dir)
+    os.mkdir(tmp_output_dir)
+    return tmp_output_dir
+
+
+def get_symlink_dir(scenario_pre_dir, subdir):
+    check_dir = os.path.join(scenario_pre_dir, subdir)
+    if not os.path.isfile(check_dir):
+        return check_dir
+    with open(check_dir) as s:
+        TSC_HOME = os.path.abspath(os.path.dirname(__file__))
+        return os.path.join(scenario_pre_dir, s.read().strip().replace("$TSC_HOME", TSC_HOME))
 
 
 def create_template_folder(scenario_pre_dir, options):
@@ -90,15 +109,19 @@ def create_template_folder(scenario_pre_dir, options):
     else:
         # make a new template folder
         os.makedirs(scenario_template_dir)
+    log_dir = os.path.join(scenario_template_dir, "log")
+    if not os.path.exists(log_dir):
+        os.mkdir(log_dir)
 
     # copy static input such as vehicle types, edge lists and processing scripts
     for ff in sorted(listdir_skip_hidden(scenario_pre_dir)):
-        if ff[-3:] in ['.gz', 'xml', '.py', 'cfg'] and ff[:12] != 'template_gen' and ff != 'setup.py':
+        if (ff[-3:] in ['.gz', 'xml', 'cfg'] and ff[:12] != 'template_gen') or ff == '__init__.py':
             print("copying %s" % ff)
             shutil.copyfile(os.path.join(scenario_pre_dir, ff), os.path.join(scenario_template_dir, ff))
 
     net_name = 'net.net.xml.gz'
     net_path = os.path.join(scenario_template_dir, net_name)
+    generated = os.path.join(scenario_template_dir, "generated_nets.txt")
     if not options.no_network:
         # check for navteq-dlr or osm data
         navteq_dlr_dir = os.path.join(scenario_pre_dir, 'navteq-dlr')
@@ -108,11 +131,7 @@ def create_template_folder(scenario_pre_dir, options):
             # emulate symlink
             navteq_dlr_dir = os.path.join(options.pre, open(navteq_dlr_dir).read().strip())
         if os.path.isdir(navteq_dlr_dir) or os.path.isdir(osm_dir):
-            # make temporary output folder
-            tmp_output_dir = os.path.join(scenario_template_dir, 'tmp_output')
-            if os.path.exists(tmp_output_dir):
-                shutil.rmtree(tmp_output_dir)
-            os.mkdir(tmp_output_dir)
+            tmp_output_dir = ensure_tmp(scenario_template_dir)
 
             if os.path.isdir(navteq_dlr_dir):
                 # get the zip file containing the network
@@ -137,22 +156,17 @@ def create_template_folder(scenario_pre_dir, options):
 
                 for idx, config in enumerate(configs):
                     netconvert_call = [netconvert, '-c', config,
-                                       '--output-file', os.path.join(tmp_output_dir, '%s_net.net.xml.gz' % idx)]
-                    if "pt" in os.path.basename(config):
-                        # needed to work around https://github.com/eclipse/sumo/issues/10732
+                                       '--output-file', os.path.join(tmp_output_dir, '%s_net.net.xml.gz' % idx),
+                                       '--log', os.path.join(log_dir, '%s.log' % os.path.basename(config)[:-8])]
+                    if options.osm_ptlines:
                         netconvert_call += ['--ptstop-output', os.path.join(tmp_output_dir, '%s_stops.add.xml.gz' % idx),
                                             '--ptline-output', os.path.join(tmp_output_dir, '%s_ptlines.xml.gz' % idx)]
                     if idx > 0:
-                        netconvert_call += ['--sumo-net-file', os.path.join(tmp_output_dir, '%s_net.net.xml.gz' % (idx-1)),
-                                            '--ptstop-files', os.path.join(tmp_output_dir, '%s_stops.add.xml.gz' % (idx-1)),
-                                            '--ptline-files', os.path.join(tmp_output_dir, '%s_ptlines.xml.gz' % (idx-1))]
-                        if "pt" in os.path.basename(config):
+                        netconvert_call += ['--sumo-net-file', os.path.join(tmp_output_dir, '%s_net.net.xml.gz' % (idx-1))]
+                        if options.osm_ptlines:
                             netconvert_call += ['--ptstop-files', os.path.join(tmp_output_dir, '%s_stops.add.xml.gz' % (idx-1)),
                                                 '--ptline-files', os.path.join(tmp_output_dir, '%s_ptlines.xml.gz' % (idx-1))]
-                    if options.verbose:
-                        print(' '.join(netconvert_call))
-                        sys.stdout.flush()
-                    subprocess.check_call(netconvert_call)
+                    call(netconvert_call, options.verbose)
 
                 if configs:
                     osmInput = glob.glob(os.path.join(osm_dir, "*.osm.xml*"))
@@ -166,13 +180,8 @@ def create_template_folder(scenario_pre_dir, options):
 
                 poly_config = os.path.join(scenario_pre_dir, 'template_gen.polycfg')
                 if os.path.isfile(poly_config):
-                    polyconvert = sumolib.checkBinary('polyconvert')
-                    polyconvertCmd = [polyconvert, '-c', poly_config,
-                                      '-o', os.path.join(scenario_template_dir, "shapes.xml"), '-v']
-                    if options.verbose:
-                        print(polyconvertCmd)
-                        sys.stdout.flush()
-                    subprocess.call(polyconvertCmd)
+                    call([sumolib.checkBinary('polyconvert'), '-c', poly_config,
+                          '-o', os.path.join(scenario_template_dir, "shapes.xml"), '-v'], options.verbose)
 
             # find last files
             for root, _, files in os.walk(tmp_output_dir):
@@ -186,15 +195,26 @@ def create_template_folder(scenario_pre_dir, options):
             shutil.rmtree(tmp_output_dir)
     setup_file = os.path.join(scenario_pre_dir, 'setup.py')
     if os.path.exists(setup_file):
-        subprocess.check_call(["python", setup_file, scenario_pre_dir, scenario_template_dir])
-    if not os.path.exists(net_path):
+        call([sys.executable, setup_file, scenario_pre_dir, scenario_template_dir], options.verbose)
+    if not os.path.exists(net_path) and not os.path.exists(generated):
         print("Could not find network '%s' for %s, cleaning up!" % (net_path, scenario_name))
         if not dir_exists:
             shutil.rmtree(scenario_template_dir)
         return
+    if os.path.exists(generated):
+        with open(generated) as netlist:
+            net_files = [os.path.join(scenario_template_dir, n.strip()) for n in netlist.readlines()]
+    else:
+        net_files = [net_path]
+    for net_file in net_files:
+        build_taz_etc(scenario_pre_dir, net_file)
 
+
+def build_taz_etc(scenario_pre_dir, net_path):
+    scenario_template_dir = os.path.dirname(net_path)
+    log_dir = os.path.join(scenario_template_dir, "log")
     net = None
-    bidi_path = os.path.join(scenario_template_dir, "bidi.taz.xml")
+    bidi_path = os.path.join(scenario_template_dir, "bidi.taz.xml.gz")
     if not os.path.exists(bidi_path) or os.path.getmtime(bidi_path) < os.path.getmtime(net_path):
         if options.verbose:
             print("calling generateBidiDistricts.main %s, %s" % (net_path, bidi_path))
@@ -202,57 +222,53 @@ def create_template_folder(scenario_pre_dir, options):
     add = bidi_path
 
     # check for gtfs folder and import
-    gtfs_dir = os.path.join(scenario_pre_dir, 'gtfs')
+    gtfs_dir = get_symlink_dir(scenario_pre_dir, 'gtfs')
     if os.path.isdir(gtfs_dir):
         if options.verbose:
             print("calling gtfs2pt")
-        # make temporary output folder
-        os.mkdir(tmp_output_dir)
+        tmp_output_dir = ensure_tmp(scenario_template_dir)
         for cfg in glob.glob(os.path.join(gtfs_dir, "*.cfg")):
             gtfs_call = ['-c', cfg, '-n', os.path.abspath(net_path),
-                         '--additional-output', os.path.join(scenario_template_dir, 'pt_routes.add.xml'),
-                         '--route-output', os.path.join(scenario_template_dir, 'pt_vehicles.add.xml'),
+                         '--additional-output', os.path.join(scenario_template_dir, 'pt_stops.add.xml.gz'),
+                         '--route-output', os.path.join(scenario_template_dir, 'pt_vehicles.add.xml.gz'),
                          '--map-output', os.path.join(tmp_output_dir, 'output'),
                          '--network-split', os.path.join(tmp_output_dir, 'resources'),
                          '--fcd', os.path.join(tmp_output_dir, 'fcd'),
                          '--gpsdat', os.path.join(tmp_output_dir, 'gpsdat'),
                          '--vtype-output', os.path.join(tmp_output_dir, 'vType.xml')]
-            if os.path.isdir(osm_dir) and glob.glob(os.path.join(scenario_template_dir, 'ptlines*')):
+            if glob.glob(os.path.join(scenario_template_dir, 'ptlines*')):
                 # if routes from osm
                 osm_routes = glob.glob(os.path.join(scenario_template_dir, 'ptlines*'))[0]
                 gtfs_call += ['--osm-routes', osm_routes, '--repair',
-                              '--dua-repair-output', os.path.join(scenario_template_dir, 'repair_errors.txt'),
-                              '--warning-output',  os.path.join(scenario_template_dir, 'missing.xml')]
+                              '--dua-repair-output', os.path.join(log_dir, 'repair_errors.txt'),
+                              '--warning-output',  os.path.join(log_dir, 'missing.xml')]
             gtfs2pt.main(gtfs2pt.get_options(gtfs_call))
         shutil.rmtree(tmp_output_dir)
 
     # check for shapes folder and import from shapes
-    shapes_dir = os.path.join(scenario_pre_dir, 'shapes')
-    if os.path.isfile(shapes_dir):
-        # emulate symlink
-        shapes_dir = os.path.join(options.pre, open(shapes_dir).read().strip())
+    shapes_dir = get_symlink_dir(scenario_pre_dir, 'shapes')
     if os.path.isdir(shapes_dir):
         polyconvert = sumolib.checkBinary('polyconvert')
         idCol = dict([e.split(":") for e in options.shape_id_column.split(",")])
-        for dbf in glob.glob(os.path.join(shapes_dir, "*.dbf")):
+        for dbf in sorted(glob.glob(os.path.join(shapes_dir, "*.dbf"))):
             prefix = os.path.basename(dbf)[:-4]
-            tazFile = os.path.join(scenario_template_dir, "districts.taz.xml")
+            tazFile = os.path.join(scenario_template_dir, "districts.taz.xml.gz")
             if prefix in idCol:
-                tazFile = os.path.join(scenario_template_dir, prefix + ".taz.xml")
+                tazFile = os.path.join(scenario_template_dir, prefix + ".taz.xml.gz")
             if options.verbose:
                 print("generating taz file %s" % tazFile)
             if not os.path.exists(tazFile) or os.path.getmtime(tazFile) < os.path.getmtime(net_path):
                 if options.verbose:
                     print("importing shapes from %s ..." % dbf)
                 polyReader = sumolib.shapes.polygon.PolygonReader(True)
-                polyFile = os.path.join(scenario_template_dir, prefix + ".poly.xml")
-                subprocess.call([polyconvert, "-n", net_path, "-o", polyFile,
-                                 "--shapefile-prefixes", os.path.join(shapes_dir, prefix),
-                                 "--shapefile.add-param", "--shapefile.traditional-axis-mapping",
-                                 "--shapefile.id-column", idCol.get(prefix, idCol["*"])])
+                polyFile = os.path.join(scenario_template_dir, prefix + ".poly.xml.gz")
+                call([polyconvert, "-n", net_path, "-o", polyFile,
+                      "--shapefile-prefixes", os.path.join(shapes_dir, prefix),
+                      "--shapefile.add-param", "--shapefile.traditional-axis-mapping",
+                      "--shapefile.id-column", idCol.get(prefix, idCol["*"])], options.verbose)
                 if options.verbose:
                     print("calculating contained edges for %s ..." % polyFile)
-                parse(polyFile, polyReader)
+                parse(sumolib.openz(polyFile), polyReader)
                 polys = polyReader.getPolygons()
                 if net is None:
                     net = sumolib.net.readNet(net_path, withConnections=False, withFoes=False)
@@ -260,8 +276,9 @@ def create_template_folder(scenario_pre_dir, options):
                 reader = edgesInDistricts.DistrictEdgeComputer(net)
                 reader.computeWithin(polys, eIDoptions)
                 reader.writeResults(eIDoptions)
+
     if options.suburb_taz:
-        tazFile = os.path.join(scenario_template_dir, options.suburb_taz + ".taz.xml")
+        tazFile = os.path.join(scenario_template_dir, options.suburb_taz + ".taz.xml.gz")
         if not os.path.exists(tazFile) or os.path.getmtime(tazFile) < os.path.getmtime(net_path):
             if options.verbose:
                 print("generating taz file %s" % tazFile)
@@ -278,18 +295,16 @@ def create_template_folder(scenario_pre_dir, options):
         add += "," + tazFile
     lm = os.path.join(scenario_pre_dir, options.landmarks)
     if os.path.isfile(lm):
-        if options.verbose:
-            print("generating landmark file %s" % lm)
-        duarouter = sumolib.checkBinary('duarouter')
         landmarkFile = os.path.join(scenario_template_dir, "landmarks.csv.gz")
         if options.verbose:
-            print("generating landmark file %s" % landmarkFile)
-        subprocess.call([duarouter, "-n", net_path, "-a", add, "--astar.landmark-distances", lm,
-                         "--astar.save-landmark-distances", landmarkFile,
-                         "--routing-threads", "24", "-v",
-                         "-o", "NUL", "--ignore-errors", "--aggregate-warnings", "5"])
+            print("generating landmark file %s from %s" % (landmarkFile, lm))
+        call([sumolib.checkBinary('duarouter'), "-n", net_path, "-a", add, "--astar.landmark-distances", lm,
+              "--astar.save-landmark-distances", landmarkFile,
+              "--routing-threads", "24", "-v",
+              "-o", "NUL", "--ignore-errors", "--aggregate-warnings", "5"], options.verbose)
     else:
-        print("could not find landmark data for %s" % scenario_name)
+        print("could not find landmark data for %s" % scenario_template_dir)
+
 
 if __name__ == "__main__":
     # generate scenario template folders from input-folders.

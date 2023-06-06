@@ -1,4 +1,4 @@
-# Copyright (C) 2013-2020 German Aerospace Center (DLR) and others.
+# Copyright (C) 2013-2022 German Aerospace Center (DLR) and others.
 # This program and the accompanying materials are made available under the
 # terms of the Eclipse Public License 2.0 which is available at
 # https://www.eclipse.org/legal/epl-2.0/
@@ -33,7 +33,6 @@ import duaIterate
 import sumolib
 from sumolib.miscutils import working_dir, benchmark
 import cutRoutes
-import sort_routes
 
 from common import abspath_in_dir
 from constants import TAPAS_EXTRA_TIME
@@ -43,7 +42,6 @@ def run_duaiterate(options, first_depart, last_depart, trip_file, weight_file, m
     dua_dir = os.path.join(options.iteration_dir, 'dua')
     if not os.path.exists(dua_dir):
         os.makedirs(dua_dir)
-    duaIterate_params = abspath_in_dir(dua_dir, 'duaIterate.params')
 
     aggregation = 1800
     begin = (int(first_depart) / aggregation) * aggregation
@@ -99,7 +97,7 @@ def run_duaiterate(options, first_depart, last_depart, trip_file, weight_file, m
             'sumo--meso-taufj', '1.4',
             'sumo--meso-taujf', '2.0',
             'sumo--meso-taujj', '2.0',
-            'sumo--meso-jam-threshold', '-1',  # edge speed specific threshold
+            'sumo--meso-jam-threshold=-1',  # edge speed specific threshold
             'sumo--meso-junction-control.limited',
         ]
     params += [
@@ -109,8 +107,8 @@ def run_duaiterate(options, first_depart, last_depart, trip_file, weight_file, m
         'duarouter--vtype-output', '/dev/null',
         'duarouter--routing-threads', '16',
     ]
-    with open(duaIterate_params, 'w') as f:
-        print(os.linesep.join(params), file=f)
+    with open(abspath_in_dir(dua_dir, 'duaIterate.cfg'), 'w') as f:
+        print(duaIterate.initOptions().parse_args(args=params).config_as_string, file=f)
 
     with working_dir(dua_dir):
         duaIterate.main(params)
@@ -141,7 +139,8 @@ def run_oneshot(options, first_depart, last_depart, trip_file, weight_file, meso
         additional.append(options.bidi_taz_file)
     base_dir = os.path.dirname(options.net_file)
     if not meso:
-        for add in (os.path.join(base_dir, 'tlsOffsets.add.xml'), os.path.join(oneshot_dir, 'vehroutes_%s_tls.add.xml' % suffix)):
+        for add in (os.path.join(base_dir, 'tlsOffsets.add.xml'),
+                    os.path.join(oneshot_dir, 'vehroutes_%s_tls.add.xml' % suffix)):
             if os.path.exists(add):
                 additional.append(add)
     extra_opt = addOpt.split()
@@ -168,9 +167,9 @@ def run_oneshot(options, first_depart, last_depart, trip_file, weight_file, meso
         <meso-junction-control.limited value="true"/>
         <meso-minor-penalty value="0.5"/>
         <meso-tls-penalty value="0.5"/>"""
-    if meso and os.path.exists(os.path.join(base_dir, "landmarks.csv")):
+    if meso and os.path.exists(os.path.join(base_dir, "landmarks.csv.gz")):
         addOpt += """
-        <astar.landmark-distances value="%s"/>""" % os.path.join(base_dir, "landmarks.csv")
+        <astar.landmark-distances value="%s"/>""" % os.path.join(base_dir, "landmarks.csv.gz")
     with open(tempcfg, 'w') as f:
         f.write(
             """<configuration>
@@ -206,6 +205,7 @@ def run_oneshot(options, first_depart, last_depart, trip_file, weight_file, meso
 
         <begin value="%s"/>
         <end value="%s"/>
+        <time-to-teleport.ride value="3600"/>
         %s
 
 </configuration>""" % (options.net_file, ",".join(trips),
@@ -216,7 +216,7 @@ def run_oneshot(options, first_depart, last_depart, trip_file, weight_file, meso
         )
 
     oneshotcfg = abspath_in_dir(oneshot_dir, '%s.sumocfg' % suffix)
-    oneshot_emissions = abspath_in_dir(oneshot_dir, 'emissions_%s.xml' % suffix)
+    # oneshot_emissions = abspath_in_dir(oneshot_dir, 'emissions_%s.xml' % suffix)
     with working_dir(oneshot_dir):
         with open(additional[1], 'w') as f:
             f.write('<additional>\n    <edgeData id="dump" freq="%s" file="%s" excludeEmpty="true" minSamples="1"/>\n' %
@@ -235,9 +235,10 @@ def run_oneshot(options, first_depart, last_depart, trip_file, weight_file, meso
 @benchmark
 def run_bulk(options, first_depart, last_depart, trip_file, weight_file):
     base = trip_file[:-4]
-    input_files = [trip_file] + list(sorted(glob.glob(os.path.join(os.path.dirname(options.net_file), 'pt*.xml'))))
+    pt_files = list(sorted(glob.glob(os.path.join(os.path.dirname(options.net_file), 'pt*.xml*'))))
+    input_files = [trip_file] + pt_files[-1:]
     route_file = base + ".rou.xml.gz"
-    additional = [options.vtype_file]
+    additional = [options.vtype_file] + pt_files[:-1]
     if options.bidi_taz_file:
         additional.append(options.bidi_taz_file)
     if os.path.exists(route_file) and (hasattr(options, 'overwrite') and not options.overwrite):
@@ -254,9 +255,9 @@ def run_bulk(options, first_depart, last_depart, trip_file, weight_file):
         '--output', route_file,
         '--alternatives-output', 'NUL',
         '--write-costs',
-#        '--exit-times',
         '--route-length',
         '--ignore-errors',
+        '--unsorted-input',
         '--verbose'
     ]
     if weight_file is None:
